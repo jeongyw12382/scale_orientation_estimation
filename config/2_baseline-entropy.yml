@@ -15,7 +15,7 @@ model:
 optimizer:
   name: Adam
   kw: 
-    lr: 0.01
+    lr: 0.0001
 metadata:
   exp_name: exp2-0.80-celoss-0.20-entropyloss
   gpu: 1
@@ -23,7 +23,7 @@ metadata:
   epoch: 20
   train_val_ratio: 0.80
   validate_every: 1
-  tbd_log: true
+  wandb_log: true
   plot_train_every: 100
   early_stop: true
   early_stop_thr: 5

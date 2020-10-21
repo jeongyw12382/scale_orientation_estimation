@@ -2,6 +2,7 @@ import torch
 import tqdm
 import math
 import pdb
+import wandb
 
 import torch.nn.functional as F
 
@@ -31,11 +32,12 @@ def argmax_validation(**kw_val):
 
     easy_val, hard_val, ext_val = corr_easy.item() / cnt, corr_hard.item() / cnt, corr_extreme.item() / cnt
     
-    if cfg.metadata.tbd_log: 
-        writer = kw_val['writer']
-        writer.add_scalar('validation/easy_thr', easy_val, kw_val['step'])
-        writer.add_scalar('validation/hard_thr', hard_val, kw_val['step'])
-        writer.add_scalar('validation/extreme_thr', ext_val, kw_val['step'])
+    if cfg.metadata.wandb_log: 
+        wandb.log({
+            'validation/easy_thr': easy_val, 
+            'validation/hard_thr': hard_val,
+            'validation/extreme_thr': ext_val,
+        }, step=kw_val['step'])
         
     return corr_easy.item() / cnt
         

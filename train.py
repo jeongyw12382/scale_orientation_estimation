@@ -3,7 +3,7 @@ import yaml
 
 import pdb
 import tqdm
-from tensorboardX import SummaryWriter
+import wandb
 from datetime import datetime
 import torch
 
@@ -38,9 +38,14 @@ def main():
     now = datetime.now()
     dt_string = now.strftime("_%Y_%m_%d_%H_%M_%S")    
     
-    if cfg.metadata.tbd_log:
+    if cfg.metadata.wandb_log:
         print('Initializing TBD!')
-        writer = SummaryWriter('runs/{}'.format(cfg.metadata.exp_name + dt_string))
+        wandb.init(
+            project="scale_orientation_estimation",
+            name = 'runs/{}'.format(cfg.metadata.exp_name),
+            config=cfg
+        )
+    
     
     assert cfg != None
     model = eval(cfg.model.name)(**cfg.model)
@@ -83,7 +88,6 @@ def main():
         for data in tqdm.tqdm(dataloader_train):
             feat = model(data, iscuda)
             train_kw = {**feat, **cfg, 'step': step}
-            if cfg.metadata.tbd_log: train_kw['writer'] = writer
             loss = loss_class(**train_kw)
             loss.backward()
             optimizer.step()
@@ -97,9 +101,8 @@ def main():
                 'model': model,
                 'iscuda': iscuda,
                 'cfg': cfg,
-                'step': epoch // cfg.metadata.validate_every
+                'step': step
             }
-            if cfg.metadata.tbd_log: val_kw['writer'] = writer
             acc = eval(cfg.validation.name)(**val_kw)
             val_loss.append(acc)
             
@@ -109,8 +112,8 @@ def main():
                 best_model = model.state_dict()
                 print('Best Acc Updated! Acc: {}'.format(best_acc))
             
-            if cfg.metadata.tbd_log:
-                log_dict = {'validation/acc': acc, 'validation/best_acc': best_acc}
+            if cfg.metadata.wandb_log:
+                wandb.log({'validation/acc': acc, 'validation/best_acc': best_acc}, step=step)
             
             if not os.path.exists(dir_path):
                 os.mkdir(dir_path)

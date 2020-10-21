@@ -2,6 +2,8 @@ import torch
 import torch.nn as nn
 import pdb
 import math
+import wandb
+
 
 import matplotlib.pyplot as plt
 
@@ -26,7 +28,9 @@ class MultiLoss (nn.Module):
         for num, (weight, loss_func) in enumerate(zip(self.weights, self.losses),1):
             val = loss_func()(**{**kw, **self.cfg})
             cum_loss += weight * val
-        if kw['metadata']['tbd_log']: kw['writer'].add_scalar('train/Loss', float(cum_loss), kw['step'])
+            if kw['metadata']['wandb_log']: wandb.log({'train/{}'.format(loss_func.__name__): val}, step=kw['step'])
+            
+        if kw['metadata']['wandb_log']: wandb.log({'train/Loss': float(cum_loss)}, step=kw['step'])
         return cum_loss
     
 class PeakyLoss(nn.Module):
@@ -37,8 +41,6 @@ class PeakyLoss(nn.Module):
     def forward(self, **kw):
         src_feats, trg_feats = kw['src_feat'], kw['trg_feat']
         loss = (self.forward_each(src_feats) + self.forward_each(trg_feats)) / 2
-        
-        if kw['metadata']['tbd_log']: kw['writer'].add_scalar('train/PeakyLoss', loss.item(), kw['step'])
         return loss
         
     def forward_each(self, feats):
@@ -55,7 +57,6 @@ class EntropyLoss(nn.Module):
         src_feats, trg_feats = kw['src_feat'], kw['trg_feat']
         src_entropy, trg_entropy = (-src_feats * torch.log(src_feats + 1e-30)).mean(), (-trg_feats * torch.log(trg_feats + 1e-30)).mean()
         loss = src_entropy + trg_entropy 
-        if kw['metadata']['tbd_log']: kw['writer'].add_scalar('train/EntropyLoss', loss.item(), kw['step'])
         return loss
     
 class KLLoss(nn.Module):
@@ -76,18 +77,11 @@ class KLLoss(nn.Module):
         trg_feats = F.normalize(trg_feats, p=1, dim=1)
         loss = (src_feats * (torch.log2(src_feats / trg_feats + 1e-30))).mean()
         
-        if kw['metadata']['tbd_log']: 
-            kw['writer'].add_scalar('train/KLLoss', loss.item(), kw['step'])
+        if kw['metadata']['wandb_log']: 
             if kw['step'] % kw['metadata']['plot_train_every'] == 0:
                 center_src_feat, center_trg_feat = src_feats[0, :, H//2, W//2], trg_feats[0, :, H//2, W//2]
-                fig, ax = plt.subplots()
-                ax.set(xlabel='scale', ylabel='feature', title='Features\' distribution')
-                ax.plot(range(overlap_dim), center_src_feat.cpu().detach().numpy())
-                ax.plot(range(overlap_dim), center_trg_feat.cpu().detach().numpy())
-                ax.set_ylim([0,1])
-                ax.grid()
-                kw['writer'].add_figure('train/feature_distribution', fig, kw['step'])
-                plt.close()
+                wandb.log({'train/feature_src_distribution': wandb.Histogram(center_src_feat.detach().cpu().numpy())}, step=kw['step'])
+                wandb.log({'train/feature_trg_distribution': wandb.Histogram(center_trg_feat.detach().cpu().numpy())}, step=kw['step'])
         
         return loss
     
@@ -110,17 +104,10 @@ class CELoss(nn.Module):
         trg_feats = F.normalize(trg_feats, p=1, dim=1)
         loss = -(src_feats * (torch.log2(trg_feats + 1e-30))).mean()
         
-        if kw['metadata']['tbd_log']: 
-            kw['writer'].add_scalar('train/CELoss', loss.item(), kw['step'])
+        if kw['metadata']['wandb_log']: 
             if kw['step'] % kw['metadata']['plot_train_every'] == 0:
                 center_src_feat, center_trg_feat = src_feats[0, :, H//2, W//2], trg_feats[0, :, H//2, W//2]
-                fig, ax = plt.subplots()
-                ax.set(xlabel='scale', ylabel='feature', title='Features\' distribution')
-                ax.plot(range(overlap_dim), center_src_feat.cpu().detach().numpy())
-                ax.plot(range(overlap_dim), center_trg_feat.cpu().detach().numpy())
-                ax.set_ylim([0,1])
-                ax.grid()
-                kw['writer'].add_figure('train/feature_distribution', fig, kw['step'])
-                plt.close()
+                wandb.log({'train/feature_src_distribution': wandb.Histogram(center_src_feat.detach().cpu().numpy())}, step=kw['step'])
+                wandb.log({'train/feature_trg_distribution': wandb.Histogram(center_trg_feat.detach().cpu().numpy())}, step=kw['step'])
         
         return loss
