@@ -2,3 +2,6 @@ logs
 wandb
 *ipynb*
 *pycache*
+runs*
+data/*
+

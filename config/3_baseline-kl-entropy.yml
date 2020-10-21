@@ -1,0 +1,32 @@
+dataset:
+  name: CIFARSelfSupScale
+  scale:
+    scale_factor: 3
+  cifar_version: 10
+  rep: 2
+model:
+  name: L2NetNaiveModel
+  model_kw: 
+    bin_num: 32
+  loss: [0.5, KLLoss, 0.5, EntropyLoss]
+  normalize: softmax
+  normalize_kw: 
+    dim: 1
+optimizer:
+  name: Adam
+  kw: 
+    lr: 0.0001
+metadata:
+  exp_name: exp3-kl-1.0-ent-0.1-lr-0.0001
+  gpu: 2
+  bsz: 64
+  epoch: 20
+  train_val_ratio: 0.80
+  validate_every: 1
+  tbd_log: true
+  plot_train_every: 100
+  early_stop: true
+  early_stop_thr: 5
+validation:
+  name: argmax_validation
+  correct_threshold: [3, 5, 10]

@@ -5,9 +5,11 @@ import pdb
 
 import torch.nn.functional as F
 
-def shifting_validation(dataloader, model, iscuda, cfg):
+def argmax_validation(**kw_val):
     
-    corr = 0
+    dataloader, model, iscuda, cfg = kw_val['dataloader'], kw_val['model'], kw_val['iscuda'], kw_val['cfg']
+    
+    corr_easy, corr_hard, corr_extreme = 0, 0, 0
     cnt = 0
     for data in tqdm.tqdm(dataloader):
         feat = model(data, iscuda)
@@ -15,58 +17,25 @@ def shifting_validation(dataloader, model, iscuda, cfg):
         sim_list = []
         best_shift = 0
 
-        for i in range(dim-1, -1, -1):
-            src_feat = F.normalize(feat['src_feat'][:, i:, :, :], p=2, dim=1)
-            trg_feat = F.normalize(feat['trg_feat'][:, :dim-i, :, :], p=2, dim=1)
-            sim = ((src_feat -  trg_feat) ** 2).sum(dim=[1,2,3]) / (H * W * (dim-i))
-            sim_list.append(sim)
-            
-        for i in range(1, dim):
-            src_feat = F.normalize(feat['src_feat'][:, :dim-i, :, :], p=2, dim=1)
-            trg_feat = F.normalize(feat['trg_feat'][:, i:, :, :], p=2, dim=1)
-            sim = ((src_feat -  trg_feat) ** 2).sum(dim=[1,2,3]) / (H * W)
-            sim_list.append(sim) 
-            
-        sim_list = torch.stack(sim_list)
-        best_shift_step = torch.argmax(sim_list, dim=0) -dim + 1
-        
-        scale = feat['scale'].cuda()
-        shift_step = (torch.log2(scale) * dim).int()
-        
-        cnt += bsz
-        corr += int((torch.abs(best_shift_step - shift_step) < cfg.validation.correct_threshold).sum())
-        
-    return corr / cnt
-        
-    
-def argmax_validation(dataloader, model, iscuda, cfg):
-    corr = 0
-    cnt = 0
-    for data in tqdm.tqdm(dataloader):
-        feat = model(data, iscuda)
-        bsz, dim, H, W = feat['src_feat'].shape
-        sim_list = []
-        best_shift = 0
+        src_feat = torch.argmax(feat['src_feat'][:, :, H//2, W//2], dim=1)
+        trg_feat = torch.argmax(feat['trg_feat'][:, :, H//2, W//2], dim=1)
+        predicted = trg_feat - src_feat
 
-        for i in range(dim-1, -1, -1):
-            src_feat = F.normalize(feat['src_feat'][:, i:, :, :], p=2, dim=1)
-            trg_feat = F.normalize(feat['trg_feat'][:, :dim-i, :, :], p=2, dim=1)
-            sim = ((src_feat -  trg_feat) ** 2).sum(dim=[1,2,3]) / (H * W * (dim-i))
-            sim_list.append(sim)
-            
-        for i in range(1, dim):
-            src_feat = F.normalize(feat['src_feat'][:, :dim-i, :, :], p=2, dim=1)
-            trg_feat = F.normalize(feat['trg_feat'][:, i:, :, :], p=2, dim=1)
-            sim = ((src_feat -  trg_feat) ** 2).sum(dim=[1,2,3]) / (H * W)
-            sim_list.append(sim) 
-            
-        sim_list = torch.stack(sim_list)
-        best_shift_step = torch.argmax(sim_list, dim=0) -dim + 1
-        
         scale = feat['scale'].cuda()
-        shift_step = (torch.log2(scale) * dim).int()
+        shift_step = torch.floor(torch.log2(scale) / math.log2(cfg['dataset']['scale']['scale_factor']) * dim)
         
         cnt += bsz
-        corr += int((torch.abs(best_shift_step - shift_step) < cfg.validation.correct_threshold).sum())
+        corr_easy += (torch.abs(predicted - shift_step) < cfg.validation.correct_threshold[2]).sum()
+        corr_hard += (torch.abs(predicted - shift_step) < cfg.validation.correct_threshold[1]).sum()
+        corr_extreme += (torch.abs(predicted - shift_step) < cfg.validation.correct_threshold[0]).sum()
+
+    easy_val, hard_val, ext_val = corr_easy.item() / cnt, corr_hard.item() / cnt, corr_extreme.item() / cnt
+    
+    if cfg.metadata.tbd_log: 
+        writer = kw_val['writer']
+        writer.add_scalar('validation/easy_thr', easy_val, kw_val['step'])
+        writer.add_scalar('validation/hard_thr', hard_val, kw_val['step'])
+        writer.add_scalar('validation/extreme_thr', ext_val, kw_val['step'])
         
-    return corr / cnt
+    return corr_easy.item() / cnt
+        
